@@ -20,3 +20,7 @@ def one_hot_enc(y):
 def split(X,Y, test_size=0.2):
     i = int(len(X) * test_size)
     return X[i :], X[: i], Y[i :], Y[: i]
+
+def multiclass_accuracy(y, y_pred):
+    n = len(y)
+    return np.sum(np.argmax(y, axis=1) == np.argmax(y_pred, axis=1)) / n

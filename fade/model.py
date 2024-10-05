@@ -40,5 +40,5 @@ class Network():
                 self.backprop(y)
             if e % 10 == 0:
                 y_pred = self.forward(x_val)
-                print(f"loss: {self.loss.loss(y_val, y_pred)}")
+                print(f"loss: {self.loss.loss(y_val, y_pred):.7f}  epoch {e}/{epoch}", end='\r')
 
