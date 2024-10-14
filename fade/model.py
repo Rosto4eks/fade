@@ -31,14 +31,18 @@ class Network():
         for layer in reversed(self.layers):
             df = layer.backward(df)
 
-    def train(self, X, Y, epoch=100, batch_size = 30):
+    def train(self, X, Y, epoch=100, batch_size=30):
         x_train, x_val, y_train, y_val = split(X, Y)
         for e in range(1, epoch + 1):
             bcs = batches(x_train, y_train, batch_size)
+            j = 0
             for x, y in bcs:
                 self.out = self.forward(x)
                 self.backprop(y)
-            if e % 10 == 0:
-                y_pred = self.forward(x_val)
-                print(f"loss: {self.loss.loss(y_val, y_pred):.7f}  epoch {e}/{epoch}", end='\r')
+                print(f"batch: {j} / {len(x_train) / batch_size} | loss: {self.loss.loss(y, self.out):.7f}", end='\r')
+                j += 1
+            print("")
+            y_pred = self.forward(x_val)
+            print(f"loss: {self.loss.loss(y_val, y_pred):.7f}  epoch {e}/{epoch}")
+            print("")
 
