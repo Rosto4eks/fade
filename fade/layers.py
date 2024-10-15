@@ -35,8 +35,8 @@ class Linear(Layer):
         dout = np.dot(df, self.w)
         dw = np.dot(df.T, self.x)
         db = np.sum(df, axis=0)
-        self.w -= self.woptimizer(dw)
-        self.b -= self.boptimizer(db)
+        self.w = self.woptimizer(self.w, dw)
+        self.b = self.boptimizer(self.b, db)
         return dout
 
 
@@ -82,6 +82,7 @@ class Conv(Layer):
         self.padding = kernel_size // 2
 
         self.kernel = None
+        self.bias = None
         self.woptimizer = None
         self.boptimizer = None
 
@@ -96,6 +97,7 @@ class Conv(Layer):
 
         if self.kernel is None:
             self.kernel = xavier_init((self.kernel_count, self.layers, self.kernel_size, self.kernel_size))
+            self.bias = np.zeros((1, self.kernel_count, 1, 1))
 
         x = np.pad(x, ((0, 0), (0, 0), (self.padding, self.padding), (self.padding, self.padding)), mode='constant', constant_values=0)
 
@@ -110,11 +112,14 @@ class Conv(Layer):
                 einsum = np.einsum("nlhw,clhw->ncwh", x[:, :, i:i+self.kernel_size, j:j+self.kernel_size], self.kernel)
                 out[:, :, i // self.stride, j // self.stride] = np.sum(einsum, axis=(2,3))
 
+        out += self.bias
+
         return out
 
     def backward(self, df):
         dw = np.zeros(shape=(self.kernel_count, self.layers, self.kernel_size, self.kernel_size))
         dx = np.zeros(shape=(self.n, self.layers, self.height + 2 * self.padding, self.width + 2 * self.padding))
+        db = np.sum(df, axis=(0, 2, 3)).reshape(1, self.kernel_count, 1, 1)
 
         for i in range(0, df.shape[2] * self.stride, self.stride):
             for j in range(0, df.shape[3] * self.stride, self.stride):
@@ -127,13 +132,14 @@ class Conv(Layer):
                 # Compute dx
                 dx[:, :, i:i+self.kernel_size, j:j+self.kernel_size] += np.einsum("nc,clhw->nlhw", df_slice, self.kernel)
 
-        self.kernel -= self.woptimizer(dw)
+        self.kernel = self.woptimizer(self.kernel, dw)
+        self.bias = self.boptimizer(self.bias, db)
 
         return dx[:, :, self.padding:self.height + self.padding, self.padding:self.width + self.padding]
             
                 
 class MaxPooing(Layer):
-    def __init__(self, kernel_size = 3, stride = 3, padding = 0):
+    def __init__(self, kernel_size = 2, stride = 2, padding = 0):
         super().__init__()
         self.kernel_size = kernel_size
         self.stride = stride

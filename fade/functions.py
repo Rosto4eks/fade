@@ -26,22 +26,13 @@ def multiclass_accuracy(y, y_pred):
     return np.sum(np.argmax(y, axis=1) == np.argmax(y_pred, axis=1)) / n
 
 def xavier_init(shape, gain=1.0):
-    """
-    Инициализация Ксавье для весов.
-    
-    :param shape: кортеж, представляющий форму тензора весов
-    :param gain: коэффициент усиления (по умолчанию 1.0)
-    :return: инициализированный массив весов
-    """
     if len(shape) == 2:
-        fan_in, fan_out = shape
+        d_in, d_out = shape
     elif len(shape) > 2:
         receptive_field_size = np.prod(shape[2:])
-        fan_in = shape[1] * receptive_field_size
-        fan_out = shape[0] * receptive_field_size
-    else:
-        raise ValueError("Shape must be at least 2-dimensional")
+        d_in = shape[1] * receptive_field_size
+        d_out = shape[0] * receptive_field_size
     
-    std = gain * np.sqrt(2.0 / (fan_in + fan_out))
+    std = gain * np.sqrt(2.0 / (d_in + d_out))
     limit = np.sqrt(3.0) * std
     return np.random.uniform(-limit, limit, shape)
