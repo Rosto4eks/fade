@@ -17,11 +17,11 @@ class Network():
             layer.boptimizer = copy.copy(self.optimizer) 
         self.layers.append(layer)
 
-    def forward(self, x):
+    def forward(self, x, training = False):
         if np.ndim(x) == 1:
             x = x[np.newaxis, :]
         for layer in self.layers:
-            x = layer.forward(x)
+            x = layer.forward(x, training)
         return x
     
     def backprop(self, y):
@@ -36,7 +36,7 @@ class Network():
             bcs = batches(X, Y, batch_size)
             for j, batch in enumerate(bcs):
                 x, y = batch
-                self.out = self.forward(x)
+                self.out = self.forward(x, True)
                 self.backprop(y)
                 print(f"epoch {e + 1}/{epoch} batch: {j + 1}/{len(X) // batch_size} | loss: {self.loss.loss(y, self.out):.7f}", end='\r')
 

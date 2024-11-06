@@ -25,14 +25,22 @@ def multiclass_accuracy(y, y_pred):
     n = len(y)
     return np.sum(np.argmax(y, axis=1) == np.argmax(y_pred, axis=1)) / n
 
-def xavier_init(shape, gain=1.0):
+def xavier_init(shape):
     if len(shape) == 2:
         d_in, d_out = shape
     elif len(shape) > 2:
         receptive_field_size = np.prod(shape[2:])
-        d_in = shape[1] * receptive_field_size
-        d_out = shape[0] * receptive_field_size
+        d_in = shape[0] * receptive_field_size
+        d_out = shape[1] * receptive_field_size
     
-    std = gain * np.sqrt(2.0 / (d_in + d_out))
-    limit = np.sqrt(3.0) * std
-    return np.random.uniform(-limit, limit, shape)
+    std = np.sqrt(2.0 / (d_in + d_out))
+    return np.random.normal(0, std, shape)
+
+
+def he_init(shape):
+    if len(shape) == 2:
+        d_out = shape[1]
+    elif len(shape) > 2:
+        d_out = shape[1] * np.prod(shape[2:])
+    std = np.sqrt(2.0 / d_out)
+    return np.random.normal(0, std, size=shape)
