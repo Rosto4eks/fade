@@ -5,16 +5,35 @@ from fade.functions import *
 import copy
 
 class Network():
-    def __init__(self, loss: Loss = CrossEntropy(), optimizer: Optimizer = Adam()):
+    def __init__(self, loss = "cross_entropy", optimizer = "adam"):
         self.layers: list[Layer] = []
-        self.loss = loss
-        self.optimizer = optimizer
+
+        if loss == "cross_entropy":
+            self.loss = CrossEntropy()
+        else:
+            raise Exception("invalid loss")
+        
+
+        if optimizer == "adam":
+            self.optimizer = Adam()
+        elif optimizer == "adamw":
+            self.optimizer = AdamW()
+        elif optimizer == "momentum":
+            self.optimizer = Momentum()
+        elif optimizer == "adagrad":
+            self.optimizer = Adagrad()
+        elif optimizer == "rmsprop":
+            self.optimizer = RMSProp()
+        elif optimizer == "default":
+            self.optimizer = Default()
+        else:
+            raise Exception("invalid optimizer")
+        
         self.out = None
 
     def add(self, layer: Layer):
-        if layer.optimizer:
-            layer.woptimizer = copy.copy(self.optimizer)
-            layer.boptimizer = copy.copy(self.optimizer) 
+        for i in range(layer.n_optimizers):
+            layer.optimizers.append(copy.copy(self.optimizer)) 
         self.layers.append(layer)
 
     def forward(self, x, training = False):

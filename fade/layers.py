@@ -2,9 +2,10 @@ import numpy as np
 from fade.functions import *
 
 class Layer():
-    def __init__(self, optimizer = False):
+    def __init__(self, n_optimizers = 0):
         self.out = None
-        self.optimizer = optimizer
+        self.n_optimizers = n_optimizers
+        
 
     def forward(self, x, training = False):
         pass
@@ -15,20 +16,19 @@ class Layer():
 
 class Linear(Layer):
     def __init__(self, n, init_fn = he_init):
-        super().__init__(True)
+        super().__init__(2)
         self.n = n
         self.w = None
         self.b = None
         self.x = None
         self.init_fn = init_fn
 
-        self.woptimizer = None
-        self.boptimizer = None
+        self.optimizers = []
 
     def forward(self, x, training = False):
         if self.w is None:
             self.w = self.init_fn((self.n, x.shape[1]))
-            self.b = np.zeros((1, self.n))
+            self.b = np.ones((1, self.n))
         self.x = x
         return np.dot(self.x, self.w.T) + self.b
     
@@ -36,69 +36,14 @@ class Linear(Layer):
         dout = np.dot(df, self.w)
         dw = np.dot(df.T, self.x)
         db = np.sum(df, axis=0)
-        self.w = self.woptimizer(self.w, dw)
-        self.b = self.boptimizer(self.b, db)
+        self.w = self.optimizers[0](self.w, dw)
+        self.b = self.optimizers[1](self.b, db)
         return dout
-
-
-class ReLU(Layer):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, x, training = False):
-        self.out = np.maximum(0, x)
-        return self.out
-    
-    def backward(self, df):
-        return df * np.clip(self.out, 0, 1)
-
-class tanh(Layer):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, x, training = False):
-        self.out = (np.exp(x) - np.exp(-x)) / (np.exp(x) + np.exp(-x))
-        return self.out
-    
-    def backward(self, df):
-        return df * (1 - np.square(self.out))
-    
-class sigmoid(Layer):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, x, training = False):
-        self.out = 1 / (1 + np.exp(-x))
-        return self.out
-    
-    def backward(self, df):
-        return df * self.out * (1 - self.out)
-    
-
-class Softmax(Layer):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, x, training = False):
-        exp_x = np.exp(x - np.max(x, axis=-1, keepdims=True))
-        self.out = exp_x / np.sum(exp_x, axis=-1, keepdims=True)
-        return self.out
-
-    def backward(self, df):
-        gradients = np.zeros_like(df)
-        
-        for i, (out, dfi) in enumerate(zip(self.out, df)):
-            jacobian = np.diag(out) - np.outer(out, out)
-            gradients[i] = np.dot(jacobian, dfi)
-        
-        return gradients
-    
-
 
 
 class Conv(Layer):
     def __init__(self, kernel_count, kernel_size = 3, stride = 1, init_fn = he_init):
-        super().__init__(True)
+        super().__init__(2)
         self.kernel_count = kernel_count
         self.kernel_size = kernel_size
         self.stride = stride
@@ -107,8 +52,7 @@ class Conv(Layer):
 
         self.kernel = None
         self.bias = None
-        self.woptimizer = None
-        self.boptimizer = None
+        self.optimizers = []
 
     def forward(self, x, training = False):
         while np.ndim(x) < 4:
@@ -156,8 +100,8 @@ class Conv(Layer):
                 # Compute dx
                 dx[:, :, i:i+self.kernel_size, j:j+self.kernel_size] += np.einsum("nc,clhw->nlhw", df_slice, self.kernel)
 
-        self.kernel = self.woptimizer(self.kernel, dw)
-        self.bias = self.boptimizer(self.bias, db)
+        self.kernel = self.optimizers[0](self.kernel, dw)
+        self.bias = self.optimizers[1](self.bias, db)
 
         return dx[:, :, self.padding:self.height + self.padding, self.padding:self.width + self.padding]
             
@@ -220,7 +164,7 @@ class Flatten(Layer):
     
 
 class Dropout(Layer):
-    def __init__(self, prob = 0.25):
+    def __init__(self, prob = 0.2):
         super().__init__()
         self.prob = prob
         self.mask = None
@@ -238,13 +182,12 @@ class Dropout(Layer):
 
 class BatchNorm(Layer):
     def __init__(self):
-        super().__init__(True)
-        self.e = 1e-12
+        super().__init__(n_optimizers=2)  # Указываем, что у слоя 2 оптимизатора
+        self.e = 1e-8  # Обычно используют меньшее значение для стабильности
         self.w = None
         self.b = None
 
-        self.woptimizer = None
-        self.boptimizer = None
+        self.optimizers = [] # Перенесено в базовый класс Layer
 
         self.mean = None
         self.std = None
@@ -253,41 +196,72 @@ class BatchNorm(Layer):
         self.run_coef = 0.9
 
         self.x_norm = None
+        self.x = None # Добавил для хранения x в forward
 
-    def forward(self, x, training = False):
-        batch_size = x.shape[0]
-        self.x = x
+    def forward(self, x, training=False):
+        self.x = x # Сохраняем вход для backward
         if self.w is None:
             self.w = np.ones(shape=x.shape[1:])
             self.b = np.zeros(shape=x.shape[1:])
             self.run_mean = np.zeros(shape=x.shape[1:])
             self.run_std = np.zeros(shape=x.shape[1:])
+
         if training:
             self.mean = np.mean(x, axis=0)
             self.std = np.std(x, axis=0)
 
-            self.run_mean = self.run_mean + (1 - self.run_coef) * self.mean
-            self.run_std = self.run_std + (1 - self.run_coef) * self.std
+            self.run_mean = self.run_coef * self.run_mean + (1 - self.run_coef) * self.mean # Исправлена формула
+            self.run_std = self.run_coef * self.run_std + (1 - self.run_coef) * self.std # Исправлена формула
 
-            x = (x - self.mean) / (self.std + self.e)
-            self.x_norm = x
+            self.x_norm = (x - self.mean) / (self.std + self.e)
         else:
-            x = (x - self.run_mean) / (self.run_std + self.e)
+            self.x_norm = (x - self.run_mean) / (self.run_std + self.e)
 
-        return self.w * x + self.b
+        return self.w * self.x_norm + self.b
 
     def backward(self, df):
         dw = np.sum(df * self.x_norm, axis=0)
         db = np.sum(df, axis=0)
-        self.w = self.woptimizer(self.w, dw)
-        self.b = self.boptimizer(self.b, db)
+        
+        self.w = self.optimizers[0](self.w, dw)
+        self.b = self.optimizers[1](self.b, db)
 
         dnorm = df * self.w
-        N = self.x_norm.shape[0]
+        N = self.x.shape[0] # Исправлено на x
         
-        dvar = np.sum(dnorm * (self.x - self.mean) * -0.5 * (self.std + self.e)**(-3), axis=0)
-        dmean = np.sum(dnorm * -1 / np.sqrt(self.std + self.e), axis=0) + dvar * np.mean(-2 * (self.x - self.mean), axis=0)
-        dx = (dnorm / np.sqrt(self.std + self.e)) + (dvar * 2 * (self.x - self.mean) / N) + (dmean / N)
+        dvar = np.sum(dnorm * (self.x - self.mean) * -0.5 * (self.std + self.e)**(-1.5), axis=0) # Исправлена степень
+        dmean = np.sum(dnorm * -1 / (self.std + self.e)**0.5, axis=0) + dvar * np.mean(-2 * (self.x - self.mean), axis=0)
+        dx = (dnorm / (self.std + self.e)**0.5) + (dvar * 2 * (self.x - self.mean) / N) + (dmean / N)
         return dx
 
-        
+
+# class Recurrent(Layer):
+#     def __init__(self, n, init_fn = he_init):
+#         super().__init__(True)
+#         self.n = n
+#         self.w = None
+#         self.hidden = None
+#         self.b = None
+#         self.x = None
+#         self.init_fn = init_fn
+
+#         self.woptimizer = None
+#         self.boptimizer = None
+
+#     def forward(self, x, training = False):
+#         if self.w is None:
+#             self.hidden = self.init_fn((1, self.n))
+#             self.w = self.init_fn((self.n + x.shape[1], self.n))
+#             self.b = np.zeros((1, self.n))
+#         self.x = x
+#         prod = np.dot(np.concatenate(self.x, self.hidden), self.w.T) + self.b
+#         self.hidden += prod
+#         return prod
+    
+#     def backward(self, df):
+#         dout = np.dot(df, self.w)
+#         dw = np.dot(df.T, self.x)
+#         db = np.sum(df, axis=0)
+#         self.w = self.woptimizer(self.w, dw)
+#         self.b = self.boptimizer(self.b, db)
+#         return dout
